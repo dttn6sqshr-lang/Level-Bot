@@ -141,9 +141,10 @@ async def on_message(message):
 
     CURSOR.execute("UPDATE users SET last_xp = ? WHERE user_id = ?", (now, message.author.id))
 
-    if new_xp >= need:
+ if new_xp >= need:
     level += 1
     new_xp -= need
+
     CURSOR.execute(
         "UPDATE users SET level = ?, xp = ? WHERE user_id = ?",
         (level, new_xp, message.author.id)
@@ -152,7 +153,7 @@ async def on_message(message):
 
     channel = discord.utils.get(message.guild.text_channels, name=BOT_CHANNEL_NAME)
     if channel:
-        reward = level  # reward math (you can adjust later)
+        reward = level
 
         embed = discord.Embed(
             title="✨ Level Up!",
