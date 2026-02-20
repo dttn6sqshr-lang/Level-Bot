@@ -142,23 +142,29 @@ async def on_message(message):
     CURSOR.execute("UPDATE users SET last_xp = ? WHERE user_id = ?", (now, message.author.id))
 
     if new_xp >= need:
-        level += 1
-        new_xp -= need
-        CURSOR.execute("UPDATE users SET level = ?, xp = ? WHERE user_id = ?", (level, new_xp, message.author.id))
-        DB.commit()
+    level += 1
+    new_xp -= need
+    CURSOR.execute(
+        "UPDATE users SET level = ?, xp = ? WHERE user_id = ?",
+        (level, new_xp, message.author.id)
+    )
+    DB.commit()
 
-        channel = discord.utils.get(message.guild.text_channels, name=BOT_CHANNEL_NAME)
-        if channel:
-            reward = level
-            embed = discord.Embed(
-                title="✨ Level Up!",
-                description=f"""**{message.author.name}** reached **Level {level}**
+    channel = discord.utils.get(message.guild.text_channels, name=BOT_CHANNEL_NAME)
+    if channel:
+        reward = level  # reward math (you can adjust later)
 
-Reward: +{reward} balance  
+        embed = discord.Embed(
+            title="✨ Level Up!",
+            description=f"""{message.author.mention} reached **Level {level}**
+
+🎀 Reward: **+{reward} Sugar Bits**
+
 <:CC_heart:1474162033179230352> Staff may now add the reward""",
-                color=get_color()
-            )
-            await channel.send(embed=embed)
+            color=get_color()
+        )
+
+        await channel.send(embed=embed)
     else:
         CURSOR.execute("UPDATE users SET xp = ? WHERE user_id = ?", (new_xp, message.author.id))
         DB.commit()
