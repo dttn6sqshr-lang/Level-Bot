@@ -1,177 +1,149 @@
 import discord
+from discord.ext import commands
 from discord import app_commands
-import random, json, os, time
-from flask import Flask
-from threading import Thread
+import random
+import json
+import os
+import time
 
 TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    raise RuntimeError("TOKEN environment variable not found!")
 
-REVIEW_CHANNEL_NAME = "✿﹒⤷﹒﹒﹒reviews"
-DATA_FILE = "levels.json"
-XP_COOLDOWN = 20
-
-HEART = "<:CC_heart:1474162033179230352>"
-
-# ================= KEEP ALIVE =================
-app = Flask("")
-
-@app.route("/")
-def home():
-    return "Level bot alive!"
-
-Thread(target=lambda: app.run(host="0.0.0.0", port=8080)).start()
-
-# ================= BOT =================
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = discord.Client(intents=intents)
-tree = app_commands.CommandTree(bot)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-cooldowns = {}
+LEVEL_UP_CHANNEL_NAME = "𖦹・🍄﹕bots！"
+REVIEW_CHANNEL_NAME = "✿﹒⤷﹒﹒﹒reviews"
+DATA_FILE = "levels.json"
 
-# ================= DATA =================
+XP_MIN = 5
+XP_MAX = 15
+COOLDOWN = 20
+
+BAR_EMOJI = "<:CC_heart:1474162033179230352>"
+
+# ------------------ DATA ------------------
+
+if not os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "w") as f:
+        json.dump({}, f)
+
 def load_data():
-    if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "w") as f:
-            json.dump({}, f)
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
-def save_data():
+def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-data = load_data()
+user_cooldowns = {}
 
-def get_user(guild_id, user_id):
-    gid = str(guild_id)
-    uid = str(user_id)
+# ------------------ EVENTS ------------------
 
-    if gid not in data:
-        data[gid] = {}
-
-    if uid not in data[gid]:
-        data[gid][uid] = {"xp":0,"level":1,"coins":0}
-
-    return data[gid][uid]
-
-def xp_needed(level):
-    return 150 + (level * 75)
-
-def make_bar(current, needed, size=10):
-    filled = int((current / needed) * size)
-    return HEART * filled + "▫️" * (size - filled)
-
-# ================= EVENTS =================
 @bot.event
 async def on_ready():
-    await tree.sync()
-    print("Level bot online")
+    await bot.tree.sync()
+    print(f"{bot.user} online")
+
+@bot.event
+async def on_member_remove(member):
+    data = load_data()
+    if str(member.id) in data:
+        del data[str(member.id)]
+        save_data(data)
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    gid = message.guild.id
-    uid = message.author.id
-    now = time.time()
+    data = load_data()
+    user_id = str(message.author.id)
 
-    if uid in cooldowns and now - cooldowns[uid] < XP_COOLDOWN:
+    now = time.time()
+    if user_id in user_cooldowns and now - user_cooldowns[user_id] < COOLDOWN:
         return
 
-    cooldowns[uid] = now
-    user = get_user(gid, uid)
+    user_cooldowns[user_id] = now
 
-    gained = 50 if message.channel.name == REVIEW_CHANNEL_NAME else random.randint(5,15)
-    user["xp"] += gained
+    if user_id not in data:
+        data[user_id] = {
+            "xp": 0,
+            "level": 1,
+            "currency": 0,
+            "customer_number": len(data) + 1
+        }
 
-    needed = xp_needed(user["level"])
+    xp_gain = random.randint(XP_MIN, XP_MAX)
 
-    if user["xp"] >= needed:
-        user["xp"] -= needed
-        user["level"] += 1
-        reward = user["level"] * 10
-        user["coins"] += reward
+    if message.channel.name == REVIEW_CHANNEL_NAME:
+        xp_gain += 50
 
-        await message.channel.send(
-            f"🎉 {message.author.mention} leveled up to **Level {user['level']}**!\n"
-            f"💰 Earned **{reward}** coins"
+    data[user_id]["xp"] += xp_gain
+
+    level = data[user_id]["level"]
+    required_xp = level * 10
+
+    if data[user_id]["xp"] >= required_xp:
+        data[user_id]["xp"] -= required_xp
+        data[user_id]["level"] += 1
+        reward = data[user_id]["level"] * 10
+        data[user_id]["currency"] += reward
+
+        embed = discord.Embed(
+            title="🧁 Level Up!",
+            description=f"{message.author.mention} just leveled up!",
+            color=0xF7C1D9
         )
+        embed.add_field(name="New Level", value=f"Level {data[user_id]['level']}", inline=True)
+        embed.add_field(name="Reward", value=f"+{reward} coins", inline=True)
+        embed.set_thumbnail(url=message.author.display_avatar.url)
 
-    save_data()
+        level_channel = discord.utils.get(message.guild.text_channels, name=LEVEL_UP_CHANNEL_NAME)
+        if level_channel:
+            await level_channel.send(embed=embed)
 
-@bot.event
-async def on_member_remove(member):
-    gid = str(member.guild.id)
-    uid = str(member.id)
-    if gid in data and uid in data[gid]:
-        del data[gid][uid]
-        save_data()
+    save_data(data)
+    await bot.process_commands(message)
 
-# ================= LEVEL EMBED =================
-@tree.command(name="level")
-async def level(interaction: discord.Interaction):
-    user = get_user(interaction.guild.id, interaction.user.id)
-    needed = xp_needed(user["level"])
-    bar = make_bar(user["xp"], needed)
+# ------------------ BAR ------------------
 
-    embed = discord.Embed(color=0xF6D2A3)
-    embed.set_author(name="Whiskette Levels", icon_url=interaction.user.avatar.url)
-    embed.add_field(name="User", value=interaction.user.mention, inline=False)
-    embed.add_field(name="Level", value=f"**{user['level']}**", inline=True)
-    embed.add_field(name="Coins", value=f"**{user['coins']}** 💰", inline=True)
-    embed.add_field(name="Progress", value=f"{bar}\n{user['xp']}/{needed} XP", inline=False)
-    embed.set_footer(text="Keep chatting & reviewing to level up ♡")
+def make_bar(current, required, length=10):
+    filled = int((current / required) * length)
+    return BAR_EMOJI * filled + "▫" * (length - filled)
 
-    await interaction.response.send_message(embed=embed)
+# ------------------ SLASH COMMAND ------------------
 
-# ================= PROFILE RECEIPT =================
-@tree.command(name="profile")
+@bot.tree.command(name="profile", description="View your level profile")
 async def profile(interaction: discord.Interaction):
-    user = get_user(interaction.guild.id, interaction.user.id)
-    needed = xp_needed(user["level"])
-    bar = make_bar(user["xp"], needed)
+    data = load_data()
+    user_id = str(interaction.user.id)
 
-    text = f"""
-⠀⠀ ⠀﹒﹒﹒⠀💌   ⠀ ***printing the receipt ***⠀ৎ
-⠀⠀ ⠀                     *level order!*
+    if user_id not in data:
+        await interaction.response.send_message("You have no profile yet!", ephemeral=True)
+        return
 
-_ _  user ﹒ {interaction.user.mention}
-_ _  level ﹒ {user['level']}
-_ _  coins ﹒ {user['coins']} 💰
+    user = data[user_id]
+    required_xp = user["level"] * 10
+    bar = make_bar(user["xp"], required_xp)
 
-{bar}
-{user['xp']}/{needed} XP
-
-> 🌷 keep chatting & reviewing to level up!
-"""
-    await interaction.response.send_message(text)
-
-# ================= LEADERBOARD =================
-@tree.command(name="leaderboard")
-async def leaderboard(interaction: discord.Interaction):
-    guild_data = data.get(str(interaction.guild.id), {})
-    sorted_users = sorted(guild_data.items(), key=lambda x: x[1]["level"], reverse=True)
-
-    embed = discord.Embed(color=0xA7B3A6)
-    embed.title = "🏆 Level Leaderboard"
-
-    for i, (uid, udata) in enumerate(sorted_users[:10], start=1):
-        member = interaction.guild.get_member(int(uid))
-        if member:
-            embed.add_field(
-                name=f"{i}. {member.display_name}",
-                value=f"Level {udata['level']}",
-                inline=False
-            )
+    embed = discord.Embed(
+        title="🧾 Customer Receipt",
+        color=0xF7C1D9
+    )
+    embed.add_field(name="Customer #", value=user["customer_number"], inline=True)
+    embed.add_field(name="Level", value=user["level"], inline=True)
+    embed.add_field(name="XP", value=f"{user['xp']} / {required_xp}", inline=False)
+    embed.add_field(name="Progress", value=bar, inline=False)
+    embed.add_field(name="Balance", value=f"{user['currency']} coins", inline=True)
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
     await interaction.response.send_message(embed=embed)
 
-# ================= RUN =================
-if not TOKEN:
-    raise RuntimeError("TOKEN environment variable not found!")
+# ------------------ RUN ------------------
 
 bot.run(TOKEN)
