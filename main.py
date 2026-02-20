@@ -5,6 +5,7 @@ import random
 import json
 import os
 import time
+from datetime import datetime, timedelta
 
 TOKEN = os.getenv("TOKEN")
 if not TOKEN:
@@ -23,10 +24,9 @@ DATA_FILE = "levels.json"
 XP_MIN = 5
 XP_MAX = 15
 COOLDOWN = 20
-
 BAR_EMOJI = "<:CC_heart:1474162033179230352>"
 
-# ------------------ DATA ------------------
+# ---------------- DATA ----------------
 
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
@@ -42,7 +42,7 @@ def save_data(data):
 
 user_cooldowns = {}
 
-# ------------------ EVENTS ------------------
+# ---------------- EVENTS ----------------
 
 @bot.event
 async def on_ready():
@@ -74,8 +74,7 @@ async def on_message(message):
         data[user_id] = {
             "xp": 0,
             "level": 1,
-            "currency": 0,
-            "customer_number": len(data) + 1
+            "last_daily": "never"
         }
 
     xp_gain = random.randint(XP_MIN, XP_MAX)
@@ -92,7 +91,6 @@ async def on_message(message):
         data[user_id]["xp"] -= required_xp
         data[user_id]["level"] += 1
         reward = data[user_id]["level"] * 10
-        data[user_id]["currency"] += reward
 
         embed = discord.Embed(
             title="🧁 Level Up!",
@@ -100,23 +98,25 @@ async def on_message(message):
             color=0xF7C1D9
         )
         embed.add_field(name="New Level", value=f"Level {data[user_id]['level']}", inline=True)
-        embed.add_field(name="Reward", value=f"+{reward} coins", inline=True)
+        embed.add_field(name="Reward", value=f"+{reward} (Mimu)", inline=True)
         embed.set_thumbnail(url=message.author.display_avatar.url)
 
         level_channel = discord.utils.get(message.guild.text_channels, name=LEVEL_UP_CHANNEL_NAME)
         if level_channel:
             await level_channel.send(embed=embed)
+            await level_channel.send(f"/modifybal add {message.author.mention} {reward}")
 
     save_data(data)
     await bot.process_commands(message)
 
-# ------------------ BAR ------------------
+# ---------------- BAR ----------------
 
-def make_bar(current, required, length=10):
-    filled = int((current / required) * length)
-    return BAR_EMOJI * filled + "▫" * (length - filled)
+def animated_bar(current, required, frames=10):
+    filled = int((current / required) * frames)
+    bar = BAR_EMOJI * filled + "▫" * (frames - filled)
+    return bar
 
-# ------------------ SLASH COMMAND ------------------
+# ---------------- PROFILE ----------------
 
 @bot.tree.command(name="profile", description="View your level profile")
 async def profile(interaction: discord.Interaction):
@@ -129,21 +129,66 @@ async def profile(interaction: discord.Interaction):
 
     user = data[user_id]
     required_xp = user["level"] * 10
-    bar = make_bar(user["xp"], required_xp)
+    bar = animated_bar(user["xp"], required_xp)
 
-    embed = discord.Embed(
-        title="🧾 Customer Receipt",
-        color=0xF7C1D9
-    )
-    embed.add_field(name="Customer #", value=user["customer_number"], inline=True)
+    embed = discord.Embed(title="🧾 User Receipt", color=0xF7C1D9)
+    embed.add_field(name="User", value=interaction.user.mention, inline=True)
     embed.add_field(name="Level", value=user["level"], inline=True)
     embed.add_field(name="XP", value=f"{user['xp']} / {required_xp}", inline=False)
     embed.add_field(name="Progress", value=bar, inline=False)
-    embed.add_field(name="Balance", value=f"{user['currency']} coins", inline=True)
     embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
     await interaction.response.send_message(embed=embed)
 
-# ------------------ RUN ------------------
+# ---------------- LEADERBOARD ----------------
+
+@bot.tree.command(name="leaderboard", description="Top 10 highest levels")
+async def leaderboard(interaction: discord.Interaction):
+    data = load_data()
+    sorted_users = sorted(data.items(), key=lambda x: x[1]["level"], reverse=True)[:10]
+
+    desc = ""
+    for i, (uid, info) in enumerate(sorted_users, start=1):
+        member = interaction.guild.get_member(int(uid))
+        name = member.display_name if member else "Unknown"
+        desc += f"**{i}.** {name} — Level {info['level']}\n"
+
+    embed = discord.Embed(title="🏆 Level Leaderboard", description=desc, color=0xF7C1D9)
+    await interaction.response.send_message(embed=embed)
+
+# ---------------- DAILY ----------------
+
+@bot.tree.command(name="daily", description="Claim daily reward")
+async def daily(interaction: discord.Interaction):
+    data = load_data()
+    user_id = str(interaction.user.id)
+
+    if user_id not in data:
+        await interaction.response.send_message("You have no profile yet!", ephemeral=True)
+        return
+
+    last = data[user_id]["last_daily"]
+
+    if last != "never":
+        last_time = datetime.fromisoformat(last)
+        if datetime.now() - last_time < timedelta(days=1):
+            remaining = timedelta(days=1) - (datetime.now() - last_time)
+            await interaction.response.send_message(f"⏳ Come back in {remaining.seconds//3600}h!", ephemeral=True)
+            return
+
+    reward = random.randint(50, 100)
+    data[user_id]["last_daily"] = datetime.now().isoformat()
+    save_data(data)
+
+    embed = discord.Embed(
+        title="🎁 Daily Reward",
+        description=f"You received **{reward} coins** (via Mimu)!",
+        color=0xF7C1D9
+    )
+
+    await interaction.response.send_message(embed=embed)
+    await interaction.channel.send(f"/modifybal add {interaction.user.mention} {reward}")
+
+# ---------------- RUN ----------------
 
 bot.run(TOKEN)
