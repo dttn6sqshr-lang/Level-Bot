@@ -95,7 +95,7 @@ Level {level} ・ {xp} XP\n\n"""
         rank += 1
 
     embed = discord.Embed(
-        title="## 𝐋𝐞𝐯𝐞𝐥 𝐋𝐞𝐚𝐝𝐞𝐫𝐛𝐨𝐚𝐫𝐝 <:CC_bell:1474449952087216199>",
+        title=" 𝐋𝐞𝐯𝐞𝐥 𝐋𝐞𝐚𝐝𝐞𝐫𝐛𝐨𝐚𝐫𝐝 <:CC_bell:1474449952087216199>",
         description=desc + "<:CC_heart:1474162033179230352>  Keep chatting to climb the sweetness ladder!\n\n-# 🌸 Levels reset if you leave the server 🌸",
         color=get_color()
     )
