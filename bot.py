@@ -171,10 +171,9 @@ _ _
 XP: {u['xp']} / {need}
 
 {CHAT} Messages: {u['messages']}
-💗 Streak: {u['streak']} days
-⏰ Last Level Up: <t:{int(u['last_level'])}:R>
-🍬 Sugar Bits: {reward_amount(u['level'])}
-🌸 Favorite Channel: {u['favorite_channel']}
+Streak: {u['streak']} days
+Last Level Up: <t:{int(u['last_level'])}:R>
+Favorite Channel: {u['favorite_channel']}
 """
 
     await interaction.response.send_message(embed=embed)
