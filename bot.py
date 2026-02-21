@@ -1,9 +1,7 @@
 import discord
 from discord import app_commands
-import random, json, os, time, asyncio
+import random, json, os, time
 from datetime import datetime, timedelta
-from flask import Flask
-from threading import Thread
 
 TOKEN = os.getenv("TOKEN")
 
@@ -18,12 +16,6 @@ TROPHY = "<:CC_trophy:1474577678790299821>"
 CHAT = "<:CC_chatbubble:1474578856144011338>"
 
 COTTAGE_COLORS = [0xFADADD, 0xFFF1C1, 0xE6F7E7, 0xF3D1F4]
-
-app = Flask("")
-@app.route("/")
-def home():
-    return "alive"
-Thread(target=lambda: app.run(host="0.0.0.0", port=8080)).start()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -55,13 +47,14 @@ def get_user(uid):
             "last_msg": 0,
             "last_day": 0,
             "last_level": 0,
-            "favorite_channel": ""
+            "favorite_channel": "",
+            "last_daily": 0
         }
     return data[uid]
 
 # ================= XP LOGIC =================
 def xp_needed(level):
-    return int(150 + (level ** 1.4) * 40)
+    return int(200 + (level ** 1.5) * 60)
 
 def heart_bar(xp, need):
     percent = xp / need
@@ -100,7 +93,7 @@ async def on_message(message):
     user["messages"] += 1
     user["favorite_channel"] = message.channel.name
 
-    xp_gain = random.randint(3, 7)
+    xp_gain = random.randint(2, 5)
 
     if message.channel.name == REVIEW_CHANNEL:
         xp_gain += 50
@@ -131,6 +124,7 @@ async def on_message(message):
         user["xp"] -= need
         user["level"] += 1
         user["last_level"] = time.time()
+
         reward = reward_amount(user["level"])
         bonus = LEVEL_REWARDS.get(user["level"], 0)
 
@@ -212,7 +206,7 @@ async def daily(interaction: discord.Interaction):
     user = get_user(interaction.user.id)
     now = time.time()
 
-    if now - user.get("last_daily", 0) < 86400:
+    if now - user["last_daily"] < 86400:
         remaining = int(86400 - (now - user["last_daily"]))
         await interaction.response.send_message(f"⏳ Try again in {remaining//3600}h", ephemeral=True)
         return
