@@ -193,7 +193,7 @@ async def leaderboard(interaction: discord.Interaction):
             rank += 1
 
     embed = discord.Embed(
-        title="## 🌸 Level Leaderboard",
+        title=" 🌸 Level Leaderboard",
         description=text + f"{HEART} Keep chatting to climb the sweetness ladder!",
         color=random.choice(COTTAGE_COLORS)
     )
