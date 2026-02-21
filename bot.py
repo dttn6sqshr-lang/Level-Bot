@@ -162,7 +162,7 @@ async def profile(interaction: discord.Interaction, user: discord.Member = None)
     embed = discord.Embed(title="🎀 Profile Card", color=random.choice(COTTAGE_COLORS))
     embed.description = f"""
 _ _
-      ∂𝜚       {user.name} ─
+      ∂𝜚       {user.name} 
         ❤︎   Level {u['level']}   ❤︎
 _ _
 
