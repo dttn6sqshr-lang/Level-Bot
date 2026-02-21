@@ -54,7 +54,7 @@ def get_user(uid):
 
 # ================= XP LOGIC =================
 def xp_needed(level):
-    return int(200 + (level ** 1.5) * 60)
+    return int(100 + (level ** 1.5) * 60)
 
 def heart_bar(xp, need):
     percent = xp / need
